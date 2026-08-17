@@ -1,6 +1,6 @@
 @echo off
 setlocal
-title ViralCutter
+title Clipo - Auto-clip, auto-viral
 
 cd /d "%~dp0"
 call .venv\Scripts\activate.bat

@@ -1,48 +1,46 @@
 @echo off
 echo ==========================================
-echo Instalando uv (Gerenciador de pacotes rapido Python)...
+echo Menginstal uv (Pengelola paket cepat Python)...
 echo ==========================================
 powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
 
+set "PATH=%USERPROFILE%\.local\bin;%USERPROFILE%\.cargo\bin;%PATH%"
+
 echo.
 echo ==========================================
-echo Criando ambiente virtual (.venv)...
+echo Membuat virtual environment (.venv)...
 echo ==========================================
-:: Tenta usar o uv do PATH. Se falhar, pode ser necessario reiniciar o terminal.
 uv venv
 
 echo.
 echo ==========================================
-echo CONFIGURACAO DE PLACA DE VIDEO
+echo KONFIGURASI KARTU GRAFIS (GPU / VGA)
 echo ==========================================
-echo Qual e a sua Placa de Video?
-echo [1] NVIDIA (Instala com aceleracao CUDA - Mais rapido)
-echo [2] AMD / Nenhuma (Ou se nao souber - Instala versao normal)
-set /p gpu_choice="Escolha (1/2): "
+echo Apa jenis Kartu Grafis (VGA) Anda?
+echo [1] NVIDIA (Dengan akselerasi CUDA - Jauh lebih cepat)
+echo [2] AMD / Intel / CPU Biasa (Versi standar)
+set /p gpu_choice="Pilihan Anda (1/2): "
 
 if "%gpu_choice%"=="1" (
     echo.
-    echo Instalando PyTorch e ONNX para NVIDIA...
+    echo Menginstal PyTorch dan ONNX untuk NVIDIA (CUDA)...
     uv pip install torch==2.5.1 torchvision==0.20.1 torchaudio==2.5.1 --index-url https://download.pytorch.org/whl/cu124
     uv pip install onnxruntime-gpu==1.20.1
 ) else (
     echo.
-    echo Instalando PyTorch e ONNX para AMD/CPU...
+    echo Menginstal PyTorch dan ONNX untuk AMD/CPU...
     uv pip install torch==2.5.1 torchvision==0.20.1 torchaudio==2.5.1 --index-url https://download.pytorch.org/whl/cpu
     uv pip install onnxruntime==1.20.1
 )
 
 echo.
 echo ==========================================
-echo Instalando dependencias essenciais do requirements.txt...
-echo (IAs em Nuvem / Sem Modelos Locais)
+echo Menginstal dependensi utama dari requirements.txt...
 echo ==========================================
-:: Ativa o venv temporariamente para o install (uv gerencia isso automaticamente se detectar o venv, mas vamos garantir)
-:: Se o uv venv criou a pasta .venv, o uv pip install vai usar ela por padrao se estiver na raiz.
 uv pip install -r requirements.txt
 
 echo.
 echo ==========================================
-echo Concluido!
+echo Selesai! Semua dependensi berhasil diinstal.
 echo ==========================================
 pause

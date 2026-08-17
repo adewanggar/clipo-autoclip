@@ -5,6 +5,7 @@ import sys
 import time
 import ast
 import io
+import requests
 
 # Configura stdout para evitar erros de encoding no Windows (substitui caracteres inválidos por ?)
 if sys.stdout and hasattr(sys.stdout, 'buffer'):
@@ -32,6 +33,152 @@ try:
     HAS_LLAMA_CPP = True
 except ImportError:
     HAS_LLAMA_CPP = False
+
+def parse_time_to_seconds(val):
+    """
+    Parses various timestamp representations (float, int, '293.22', '04:53.22', '01:23:45')
+    into seconds as float.
+    """
+    if val is None:
+        return 0.0
+    if isinstance(val, (int, float)):
+        return float(val)
+    if isinstance(val, str):
+        val = val.strip()
+        if not val:
+            return 0.0
+        if ":" in val:
+            parts = val.split(":")
+            try:
+                if len(parts) == 3:
+                    return float(parts[0]) * 3600 + float(parts[1]) * 60 + float(parts[2])
+                elif len(parts) == 2:
+                    return float(parts[0]) * 60 + float(parts[1])
+            except ValueError:
+                pass
+        try:
+            return float(val)
+        except ValueError:
+            return 0.0
+    return 0.0
+
+def normalize_segments_data(raw_data, min_duration=None, max_duration=None):
+    """
+    Normalizes custom JSON structures (e.g. {"highlights": [...]}, {"segments": [...]}, or [...])
+    into the standard ViralCutter format: {"segments": [ ... ]}
+    """
+    if isinstance(raw_data, str):
+        raw_data = raw_data.strip()
+        if not raw_data:
+            return {"segments": []}
+        if os.path.exists(raw_data):
+            with open(raw_data, 'r', encoding='utf-8') as f:
+                raw_data = json.load(f)
+        else:
+            raw_data = json.loads(raw_data)
+            
+    items = []
+    if isinstance(raw_data, list):
+        items = raw_data
+    elif isinstance(raw_data, dict):
+        if "highlights" in raw_data and isinstance(raw_data["highlights"], list):
+            items = raw_data["highlights"]
+        elif "segments" in raw_data and isinstance(raw_data["segments"], list):
+            items = raw_data["segments"]
+        elif "virals" in raw_data and isinstance(raw_data["virals"], list):
+            items = raw_data["virals"]
+        elif "clips" in raw_data and isinstance(raw_data["clips"], list):
+            items = raw_data["clips"]
+        else:
+            # Check if dict itself represents a single segment
+            if "start_time" in raw_data or "start" in raw_data or "title" in raw_data:
+                items = [raw_data]
+
+    normalized = []
+    for i, item in enumerate(items):
+        if not isinstance(item, dict):
+            continue
+        title = item.get("title") or item.get("name") or f"Highlight_{i+1}"
+        
+        # Start time
+        start_val = item.get("start_time") if "start_time" in item else item.get("start", 0)
+        start_time = parse_time_to_seconds(start_val)
+        
+        # End time & Duration
+        end_val = item.get("end_time") if "end_time" in item else item.get("end", None)
+        dur_val = item.get("duration", None)
+        
+        if end_val is not None:
+            end_time = parse_time_to_seconds(end_val)
+            duration = end_time - start_time
+        elif dur_val is not None:
+            duration = parse_time_to_seconds(dur_val)
+            end_time = start_time + duration
+        else:
+            duration = 30.0
+            end_time = start_time + duration
+            
+        if duration <= 0:
+            duration = max(1.0, end_time - start_time) if end_time > start_time else 30.0
+            end_time = start_time + duration
+
+        score = item.get("score", 80)
+        try:
+            score = float(score) if isinstance(score, (int, float, str)) else 80
+        except:
+            score = 80
+            
+        hook = item.get("hook_sentence") or item.get("hook") or item.get("hook_text") or title
+        reasoning = item.get("virality_reason") or item.get("reasoning") or item.get("description") or item.get("explanation") or ""
+        
+        normalized_seg = {
+            "title": str(title),
+            "start_time": start_time,
+            "end_time": end_time,
+            "duration": round(duration, 3),
+            "score": score,
+            "hook": str(hook),
+            "hook_sentence": str(hook),
+            "reasoning": str(reasoning),
+            "virality_reason": str(reasoning),
+            "description": str(reasoning)
+        }
+        normalized.append(normalized_seg)
+        
+    return {"segments": normalized}
+
+def load_custom_json(source):
+    """
+    Loads custom JSON highlights from a file path or raw string.
+    """
+    if not source:
+        return {"segments": []}
+    
+    if isinstance(source, str):
+        source_str = source.strip()
+        if os.path.exists(source_str):
+            print(f"[INFO] Loading custom highlights JSON from file: {source_str}")
+            with open(source_str, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            return normalize_segments_data(data)
+        else:
+            # Parse as JSON string
+            try:
+                data = json.loads(source_str)
+                print(f"[INFO] Loaded custom highlights JSON from text input.")
+                return normalize_segments_data(data)
+            except Exception as e:
+                print(f"[ERROR] Failed to parse custom JSON string: {e}")
+                # Fallback: clean_json_response
+                cleaned = clean_json_response(source_str)
+                if cleaned.get("segments"):
+                    return normalize_segments_data(cleaned)
+                raise ValueError(f"Invalid JSON provided: {e}")
+    elif isinstance(source, (dict, list)):
+        return normalize_segments_data(source)
+    
+    return {"segments": []}
+
 
 def clean_json_response(response_text):
     """
@@ -228,6 +375,80 @@ def call_gemini(prompt, api_key, model_name='gemini-2.5-flash-lite-preview-09-20
                 return "{}"
     
     print("Falha após max retries no Gemini.")
+    return "{}"
+
+def call_kieai(prompt, api_key, model_name='gpt-5-6-luna', reasoning_effort='medium'):
+    if not api_key:
+        print("[ERRO] API Key do Kie.ai não foi fornecida.")
+        return "{}"
+    
+    url = "https://api.kie.ai/codex/v1/responses"
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+        "Accept": "application/json"
+    }
+    payload = {
+        "model": model_name,
+        "stream": False,
+        "input": [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "input_text",
+                        "text": prompt
+                    }
+                ]
+            }
+        ],
+        "reasoning": {
+            "effort": reasoning_effort
+        }
+    }
+    
+    max_retries = 3
+    base_wait = 5
+    for attempt in range(max_retries):
+        try:
+            response = requests.post(url, headers=headers, json=payload, timeout=180)
+            if response.status_code == 200:
+                try:
+                    data = response.json()
+                except Exception:
+                    # Fallback if streaming SSE text was returned
+                    data = None
+                    for line in response.text.splitlines():
+                        if line.startswith("data: "):
+                            try:
+                                chunk = json.loads(line[6:])
+                                if "response" in chunk:
+                                    data = chunk["response"]
+                            except:
+                                pass
+                
+                if isinstance(data, dict):
+                    for item in data.get("output", []):
+                        if item.get("type") == "message":
+                            for content in item.get("content", []):
+                                if content.get("type") == "output_text":
+                                    return content.get("text", "")
+                    return json.dumps(data)
+                elif response.text:
+                    return response.text
+                return "{}"
+            elif response.status_code in [408, 409, 429, 500, 502, 503, 504]:
+                wait_time = base_wait * (2 ** attempt)
+                print(f"[WARN] Kie.ai retornou status {response.status_code}. Tentando novamente em {wait_time}s... (Tentativa {attempt+1}/{max_retries})")
+                time.sleep(wait_time)
+            else:
+                print(f"Erro na API do Kie.ai ({response.status_code}): {response.text}")
+                return "{}"
+        except Exception as e:
+            print(f"[WARN] Erro de conexão com Kie.ai (Tentativa {attempt+1}/{max_retries}): {e}")
+            if attempt < max_retries - 1:
+                time.sleep(base_wait * (2 ** attempt))
+    print(f"Falha crítica após {max_retries} tentativas no Kie.ai.")
     return "{}"
 
 def call_g4f(prompt, model_name="gpt-4o-mini"):
@@ -498,7 +719,23 @@ def process_segments(raw_segments, transcript_segments, min_duration, max_durati
     return final_result
 
 
-def create(num_segments, viral_mode, themes, tempo_minimo, tempo_maximo, ai_mode="manual", api_key=None, project_folder="tmp", chunk_size_arg=None, model_name_arg=None):
+def create(num_segments, viral_mode, themes, tempo_minimo, tempo_maximo, ai_mode="manual", api_key=None, project_folder="tmp", chunk_size_arg=None, model_name_arg=None, custom_json=None):
+    # Direct Custom JSON Mode
+    if ai_mode in ["json", "custom_json"] or custom_json:
+        if custom_json:
+            print(f"[INFO] Using custom highlights JSON directly (Bypassing AI analysis)...")
+            return load_custom_json(custom_json)
+        else:
+            # Look for response.json or highlights.json in project_folder
+            for candidate_name in ["highlights.json", "custom_segments.json", "response.json"]:
+                candidate_path = os.path.join(project_folder, candidate_name)
+                if os.path.exists(candidate_path):
+                    print(f"[INFO] Found custom JSON file at: {candidate_path}")
+                    return load_custom_json(candidate_path)
+            # If not found, ask or return empty
+            print(f"[WARN] ai_mode='json' selected but no custom JSON provided or found in {project_folder}.")
+            return {"segments": []}
+
     quantidade_de_virals = num_segments
 
     # 1. Load Transcript
@@ -514,7 +751,13 @@ def create(num_segments, viral_mode, themes, tempo_minimo, tempo_maximo, ai_mode
     prompt_path = os.path.join(base_dir, 'prompt.txt')
 
     config = {
-        "selected_api": "gemini",
+        "selected_api": "kieai",
+        "kieai": {
+            "api_key": "",
+            "model": "gpt-5-6-luna",
+            "chunk_size": 20000,
+            "reasoning_effort": "medium"
+        },
         "gemini": {
             "api_key": "",
             "model": "gemini-2.5-flash-lite-preview-09-2025",
@@ -530,6 +773,7 @@ def create(num_segments, viral_mode, themes, tempo_minimo, tempo_maximo, ai_mode
         try:
             with open(config_path, 'r', encoding='utf-8') as f:
                 loaded_config = json.load(f)
+                if "kieai" in loaded_config: config["kieai"].update(loaded_config["kieai"])
                 if "gemini" in loaded_config: config["gemini"].update(loaded_config["gemini"])
                 if "g4f" in loaded_config: config["g4f"].update(loaded_config["g4f"])
                 if "selected_api" in loaded_config: config["selected_api"] = loaded_config["selected_api"]
@@ -537,10 +781,19 @@ def create(num_segments, viral_mode, themes, tempo_minimo, tempo_maximo, ai_mode
             print(f"Erro ao ler api_config.json: {e}")
 
     # Config Vars
-    current_chunk_size = 15000
+    current_chunk_size = 20000
     model_name = ""
+    reasoning_effort = "medium"
     
-    if ai_mode == "gemini":
+    if ai_mode == "kieai":
+        cfg_chunk = config.get("kieai", {}).get("chunk_size", 20000)
+        current_chunk_size = chunk_size_arg if chunk_size_arg and int(chunk_size_arg) > 0 else cfg_chunk
+        cfg_model = config.get("kieai", {}).get("model", "gpt-5-6-luna")
+        model_name = model_name_arg if model_name_arg else cfg_model
+        reasoning_effort = config.get("kieai", {}).get("reasoning_effort", "medium")
+        if not api_key: api_key = config.get("kieai", {}).get("api_key", "")
+
+    elif ai_mode == "gemini":
         cfg_chunk = config["gemini"].get("chunk_size", 15000)
         current_chunk_size = chunk_size_arg if chunk_size_arg and int(chunk_size_arg) > 0 else cfg_chunk
         cfg_model = config["gemini"].get("model", "gemini-2.5-flash-lite-preview-09-2025")
@@ -739,6 +992,9 @@ OUTPUT JSON ONLY:
                     except:
                         pass
 
+        elif ai_mode == "kieai":
+            print(f"Enviando chunk {i+1} para Kie.ai GPT Luna (Model: {model_name})...")
+            response_text = call_kieai(prompt, api_key, model_name=model_name, reasoning_effort=reasoning_effort)
         elif ai_mode == "gemini":
             print(f"Enviando chunk {i+1} para o Gemini (Model: {model_name})...")
             response_text = call_gemini(prompt, api_key, model_name=model_name)

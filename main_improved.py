@@ -110,8 +110,9 @@ def main():
     parser.add_argument("--max-duration", type=int, default=90, help="Maximum segment duration (seconds)")
     parser.add_argument("--model", default="large-v3-turbo", help="Whisper model to use")
     
-    parser.add_argument("--ai-backend", choices=["manual", "gemini", "g4f", "local"], help="AI backend for viral analysis")
-    parser.add_argument("--api-key", help="Gemini API Key (required if ai-backend is gemini)")
+    parser.add_argument("--ai-backend", choices=["manual", "gemini", "kieai", "g4f", "local", "json", "custom_json"], help="AI backend for viral analysis (or 'json' for custom highlights JSON)")
+    parser.add_argument("--api-key", help="API Key for Gemini or Kie.ai (required if using cloud AI)")
+    parser.add_argument("--custom-json", help="Path to custom highlights JSON file or raw JSON string")
     
     parser.add_argument("--chunk-size", help="Override Chunk Size")
     parser.add_argument("--ai-model-name", help="Override AI Model Name")
@@ -216,7 +217,17 @@ def main():
     viral_segments = None
     project_folder_anticipated = None
 
-    if input_video:
+    # Se custom_json foi passado via argumento, carrega antecipadamente
+    if args.custom_json:
+        try:
+            viral_segments = create_viral_segments.load_custom_json(args.custom_json)
+            if viral_segments and viral_segments.get("segments"):
+                print(i18n("Loaded {} custom highlights from input.").format(len(viral_segments["segments"])))
+                ai_backend = "json"
+        except Exception as e:
+            print(i18n("Error loading custom JSON from --custom-json: {}").format(e))
+
+    if input_video and not viral_segments:
         # Se já temos o vídeo, podemos deduzir a pasta
         project_folder_anticipated = os.path.dirname(input_video)
         viral_segments_file = os.path.join(project_folder_anticipated, "viral_segments.txt")
@@ -244,7 +255,7 @@ def main():
     num_segments = None
     viral_mode = False
     themes = ""
-    ai_backend = "manual" # default
+    ai_backend = args.ai_backend or "manual" # default
     api_key = None
     
     if not viral_segments:
@@ -308,17 +319,21 @@ def main():
                 ai_backend = "manual"
             else:
                 print("\n" + i18n("Select AI Backend for Viral Analysis:"))
-                print(i18n("1. Gemini API (Best / Recommended)"))
-                print(i18n("2. G4F (Free / Experimental)"))
-                print(i18n("3. Local (GGUF via llama.cpp)"))
-                print(i18n("4. Manual (Copy/Paste Prompt)"))
-                choice = input(i18n("Choose (1-4): ")).strip()
+                print(i18n("1. Kie.ai (GPT-5.6 Luna - Default)"))
+                print(i18n("2. Gemini API (Google)"))
+                print(i18n("3. G4F (Free / Experimental)"))
+                print(i18n("4. Local (GGUF via llama.cpp)"))
+                print(i18n("5. Manual (Copy/Paste Prompt)"))
+                print(i18n("6. Custom JSON (File or Direct Highlights Input)"))
+                choice = input(i18n("Choose (1-6): ")).strip()
                 
                 if choice == "1":
-                    ai_backend = "gemini"
+                    ai_backend = "kieai"
                 elif choice == "2":
-                    ai_backend = "g4f"
+                    ai_backend = "gemini"
                 elif choice == "3":
+                    ai_backend = "g4f"
+                elif choice == "4":
                     ai_backend = "local"
                     # Interactive model selection for local
                     # List models
@@ -347,22 +362,42 @@ def main():
                              print(i18n("Invalid input. Using first model."))
                              args.ai_model_name = models[0]
                              
+                elif choice == "6":
+                    ai_backend = "json"
+                    json_input = input(i18n("Enter JSON file path or paste JSON content: ")).strip()
+                    if json_input:
+                        args.custom_json = json_input
+                        try:
+                            viral_segments = create_viral_segments.load_custom_json(json_input)
+                            if viral_segments and viral_segments.get("segments"):
+                                print(i18n("Loaded {} custom highlights.").format(len(viral_segments["segments"])))
+                        except Exception as e:
+                            print(i18n("Error loading custom JSON: {}").format(e))
                 else:
                     ai_backend = "manual"
 
         api_key = args.api_key
-        # Check config for API Key if using Gemini
-        if ai_backend == "gemini" and not api_key:
+        # Check config for API Key if using Kie.ai or Gemini
+        if ai_backend == "kieai" and not api_key:
+            cfg_key = api_config.get("kieai", {}).get("api_key", "")
+            if cfg_key:
+                api_key = cfg_key
+            elif args.skip_prompts:
+                print(i18n("Kie.ai API key missing, but skip-prompts is ON. Might fail."))
+            else:
+                api_key = input(i18n("Enter your Kie.ai API Key: ")).strip()
+
+        elif ai_backend == "gemini" and not api_key:
             cfg_key = api_config.get("gemini", {}).get("api_key", "")
             if cfg_key and cfg_key != "SUA_KEY_AQUI":
                 api_key = cfg_key
         
-        if ai_backend == "gemini" and not api_key:
-             if args.skip_prompts:
-                 print(i18n("Gemini API key missing, but skip-prompts is ON. Might fail."))
-             else:
-                 print(i18n("Gemini API Key not found in api_config.json or arguments."))
-                 api_key = input(i18n("Enter your Gemini API Key: ")).strip()
+            if not api_key:
+                if args.skip_prompts:
+                    print(i18n("Gemini API key missing, but skip-prompts is ON. Might fail."))
+                else:
+                    print(i18n("Gemini API Key not found in api_config.json or arguments."))
+                    api_key = input(i18n("Enter your Gemini API Key: ")).strip()
 
     # Workflow & Face Config Inputs
     workflow_choice = args.workflow
@@ -466,19 +501,24 @@ def main():
                             print(i18n("Error loading existing JSON: {}.").format(e))
                     
                 if not viral_segments:
-                    print(i18n("Creating viral segments using {}...").format(ai_backend.upper()))
-                    viral_segments = create_viral_segments.create(
-                        num_segments, 
-                        viral_mode, 
-                        themes, 
-                        args.min_duration, 
-                        args.max_duration,
-                        ai_mode=ai_backend,
-                        api_key=api_key,
-                        project_folder=project_folder,
-                        chunk_size_arg=args.chunk_size,
-                        model_name_arg=args.ai_model_name
-                    )
+                    if ai_backend in ["json", "custom_json"] or args.custom_json:
+                        print(i18n("Loading custom highlights JSON..."))
+                        viral_segments = create_viral_segments.load_custom_json(args.custom_json)
+                    else:
+                        print(i18n("Creating viral segments using {}...").format(ai_backend.upper()))
+                        viral_segments = create_viral_segments.create(
+                            num_segments, 
+                            viral_mode, 
+                            themes, 
+                            args.min_duration, 
+                            args.max_duration,
+                            ai_mode=ai_backend,
+                            api_key=api_key,
+                            project_folder=project_folder,
+                            chunk_size_arg=args.chunk_size,
+                            model_name_arg=args.ai_model_name,
+                            custom_json=args.custom_json
+                        )
                 
                 if not viral_segments or not viral_segments.get("segments"):
                     print(i18n("Error: No viral segments were generated."))
@@ -486,7 +526,7 @@ def main():
                     print(i18n("Stopping execution."))
                     sys.exit(1)
                 
-                save_json.save_viral_segments(viral_segments, project_folder=project_folder) 
+            save_json.save_viral_segments(viral_segments, project_folder=project_folder) 
 
         # 3.5. Fix Raw Segments (missing timestamps)
         if workflow_choice != "3" and viral_segments and "segments" in viral_segments:

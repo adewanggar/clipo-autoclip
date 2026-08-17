@@ -1,7 +1,16 @@
-import gradio as gr
-import subprocess
 import os
 import sys
+
+# Ensure current directory and project root are in sys.path
+CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
+PROJECT_ROOT = os.path.dirname(CURRENT_DIR)
+if CURRENT_DIR not in sys.path:
+    sys.path.insert(0, CURRENT_DIR)
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
+
+import gradio as gr
+import subprocess
 import json
 import psutil
 import shutil
@@ -11,17 +20,14 @@ import urllib.parse
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 import uvicorn
-
-
 import re
 import library # Module for Library Logic
 import subtitle_handler as subs # Module for Subtitles
 import subtitle_editor as editor # Module for Editor Logic
 
 # Path to the main script
-MAIN_SCRIPT_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "main_improved.py")
-WORKING_DIR = os.path.dirname(MAIN_SCRIPT_PATH)
-sys.path.append(WORKING_DIR)
+MAIN_SCRIPT_PATH = os.path.join(PROJECT_ROOT, "main_improved.py")
+WORKING_DIR = PROJECT_ROOT
 
 from i18n.i18n import I18nAuto
 i18n = I18nAuto()
@@ -128,6 +134,10 @@ def kill_process():
             return i18n("Error terminating process: {}").format(e)
     return i18n("No process running.")
 
+KIEAI_MODELS = [
+    'gpt-5-6-luna'
+]
+
 GEMINI_MODELS = [
     'gemini-3-pro-preview',
     'gemini-2.5-flash',
@@ -181,7 +191,8 @@ def apply_experimental_preset(preset_name):
 def run_viral_cutter(input_source, project_name, url, video_file, segments, viral, themes, min_duration, max_duration, model, ai_backend, api_key, ai_model_name, chunk_size, workflow, face_model, face_mode, face_detect_interval, no_face_mode, 
                      face_filter_thresh, face_two_thresh, face_conf_thresh, face_dead_zone, focus_active_speaker, active_speaker_mar, active_speaker_score_diff, include_motion, active_speaker_motion_threshold, active_speaker_motion_sensitivity, active_speaker_decay,
                      use_custom_subs, font_name, font_size, font_color, highlight_color, outline_color, outline_thickness, shadow_color, shadow_size, is_bold, is_italic, is_uppercase, vertical_pos, alignment,
-                     h_size, w_block, gap, mode, under, strike, border_s, remove_punc, video_quality, use_youtube_subs, translate_target):
+                     h_size, w_block, gap, mode, under, strike, border_s, remove_punc, video_quality, use_youtube_subs, translate_target,
+                     custom_json_file=None, custom_json_text=""):
     
     global current_process
     yield "", gr.update(value=i18n("Running..."), interactive=False), gr.update(visible=True), None 
@@ -241,6 +252,19 @@ def run_viral_cutter(input_source, project_name, url, video_file, segments, vira
     cmd.extend(["--model", model])
     cmd.extend(["--ai-backend", ai_backend])
     if api_key: cmd.extend(["--api-key", api_key])
+    
+    # Custom JSON Highlights
+    if ai_backend in ["json", "custom_json"] or custom_json_file or (custom_json_text and custom_json_text.strip()):
+        if custom_json_file:
+            cmd.extend(["--custom-json", str(custom_json_file)])
+        elif custom_json_text and custom_json_text.strip():
+            temp_json_path = os.path.join(WORKING_DIR, "temp_custom_highlights.json")
+            try:
+                with open(temp_json_path, "w", encoding="utf-8") as f:
+                    f.write(custom_json_text.strip())
+                cmd.extend(["--custom-json", temp_json_path])
+            except Exception as e:
+                print(f"Error saving temp custom json: {e}")
     
     # New AI Params
     if ai_model_name: cmd.extend(["--ai-model-name", str(ai_model_name)])
@@ -386,7 +410,7 @@ footer {visibility: hidden}
 
 import header
 
-with gr.Blocks(title=i18n("ViralCutter WebUI"), theme=gr.themes.Default(primary_hue="orange", neutral_hue="slate"), css=css) as demo:
+with gr.Blocks(title=i18n("Clipo - Auto-clip, auto-viral"), theme=gr.themes.Default(primary_hue="orange", neutral_hue="slate"), css=css) as demo:
     gr.Markdown(header.badges)
     gr.Markdown(header.description)
     with gr.Tabs():
@@ -426,26 +450,40 @@ with gr.Blocks(title=i18n("ViralCutter WebUI"), theme=gr.themes.Default(primary_
                         max_dur_input = gr.Number(label=i18n("Max Duration (s)"), value=90)
                 with gr.Column(scale=1):
                     with gr.Row():
-                        ai_backend_input = gr.Dropdown(choices=[(i18n("Gemini"), "gemini"), (i18n("G4F"), "g4f"), (i18n("Local (GGUF)"), "local"), (i18n("Manual"), "manual")], label=i18n("AI Backend"), value="gemini", scale=2)
-                        api_key_input = gr.Textbox(label=i18n("Gemini API Key"), type="password", scale=3)
+                        ai_backend_input = gr.Dropdown(choices=[(i18n("Kie.ai (GPT Luna)"), "kieai"), (i18n("Gemini"), "gemini"), (i18n("G4F"), "g4f"), (i18n("Local (GGUF)"), "local"), (i18n("Manual"), "manual"), (i18n("Custom JSON (Highlights)"), "json")], label=i18n("AI Backend"), value="kieai", scale=2)
+                        api_key_input = gr.Textbox(label=i18n("API Key"), type="password", value="ee0c507e977a496aa2a7a9fc0d539eaf", scale=3)
                     
                     # New Dynamic Inputs
                     with gr.Row():
-                        ai_model_input = gr.Dropdown(choices=GEMINI_MODELS, label=i18n("AI Model"), value=GEMINI_MODELS[1], allow_custom_value=True, visible=True, scale=5)
+                        ai_model_input = gr.Dropdown(choices=KIEAI_MODELS, label=i18n("AI Model"), value=KIEAI_MODELS[0], allow_custom_value=True, visible=True, scale=5)
                         refresh_models_btn = gr.Button("🔄", size="sm", visible=False, scale=0, min_width=50) # Only local
-                        chunk_size_input = gr.Number(label=i18n("Chunk Size"), value=70000, precision=0, scale=2)
+                        chunk_size_input = gr.Number(label=i18n("Chunk Size"), value=20000, precision=0, scale=2)
                     
-                    # Update listeners with logic to hide/show API key
+                    # Custom JSON Highlight Inputs (Visible only when Custom JSON is selected)
+                    custom_json_file = gr.File(label=i18n("Upload JSON File"), file_count="single", file_types=[".json", ".txt"], visible=False)
+                    custom_json_text = gr.Textbox(
+                        label=i18n("Or Paste Custom JSON"), 
+                        lines=6, 
+                        placeholder='{\n  "highlights": [\n    {\n      "title": "Her Biggest Fear: Being Alone With All the Money in the World",\n      "start_time": 293.22,\n      "end_time": 442.71,\n      "score": 82,\n      "hook_sentence": "I could not be where I\'m at without him.",\n      "virality_reason": "A raw, vulnerable confession..."\n    }\n  ]\n}', 
+                        visible=False
+                    )
+                    
+                    # Update listeners with logic to hide/show API key & Custom JSON
                     def update_ai_ui(backend):
-                        show_api = (backend == "gemini")
+                        show_api = (backend in ["kieai", "gemini"])
                         show_refresh = (backend == "local")
+                        is_custom_json = (backend == "json")
                         
                         # Definições padrão para evitar que fiquem vazios
                         new_choices = []
                         new_val = ""
-                        new_chunk = 70000
+                        new_chunk = 20000
                         
-                        if backend == "gemini":
+                        if backend == "kieai":
+                            new_choices = KIEAI_MODELS
+                            new_val = KIEAI_MODELS[0]
+                            new_chunk = 20000
+                        elif backend == "gemini":
                             new_choices = GEMINI_MODELS
                             new_val = GEMINI_MODELS[1]
                             new_chunk = 70000
@@ -458,14 +496,18 @@ with gr.Blocks(title=i18n("ViralCutter WebUI"), theme=gr.themes.Default(primary_
                             new_choices = models if models else [i18n("No models found")]
                             new_val = new_choices[0]
                             new_chunk = 30000
+                        elif backend == "json":
+                            pass
                         else: # Manual
-                             pass
+                            pass
 
                         return (
-                            gr.update(visible=show_api), # API Key Visibility (Fixes hole 1)
-                            gr.update(choices=new_choices, value=new_val, visible=(backend != "manual")), # Model Dropdown
+                            gr.update(visible=show_api), # API Key Visibility
+                            gr.update(choices=new_choices, value=new_val, visible=(backend not in ["manual", "json"])), # Model Dropdown
                             gr.update(visible=show_refresh), # Refresh Button
-                            gr.update(value=new_chunk) # Chunk Size
+                            gr.update(value=new_chunk, visible=(backend != "json")), # Chunk Size
+                            gr.update(visible=is_custom_json), # custom_json_file
+                            gr.update(visible=is_custom_json)  # custom_json_text
                         )
 
                     def refresh_local_models():
@@ -474,7 +516,7 @@ with gr.Blocks(title=i18n("ViralCutter WebUI"), theme=gr.themes.Default(primary_
                         return gr.update(choices=models, value=val)
 
                     refresh_models_btn.click(refresh_local_models, outputs=ai_model_input)
-                    ai_backend_input.change(update_ai_ui, inputs=ai_backend_input, outputs=[api_key_input, ai_model_input, refresh_models_btn, chunk_size_input])
+                    ai_backend_input.change(update_ai_ui, inputs=ai_backend_input, outputs=[api_key_input, ai_model_input, refresh_models_btn, chunk_size_input, custom_json_file, custom_json_text])
 
                     model_input = gr.Dropdown(["tiny", "small", "medium", "large", "large-v1", "large-v2", "large-v3", "turbo", "large-v3-turbo", "distil-large-v2", "distil-medium.en", "distil-small.en", "distil-large-v3"], label=i18n("Whisper Model"), value="large-v3-turbo")
                     with gr.Row():
@@ -639,7 +681,8 @@ with gr.Blocks(title=i18n("ViralCutter WebUI"), theme=gr.themes.Default(primary_
                  # New Inputs
                  highlight_size_input, words_per_block_input, gap_limit_input, mode_input, 
                  underline_input, strikeout_input, border_style_input, remove_punc_input,
-                 video_quality_input, use_youtube_subs_input, translate_input
+                 video_quality_input, use_youtube_subs_input, translate_input,
+                 custom_json_file, custom_json_text
              ], outputs=[logs_output, start_btn, stop_btn, results_html])
 
 
@@ -821,10 +864,9 @@ with gr.Blocks(title=i18n("ViralCutter WebUI"), theme=gr.themes.Default(primary_
         <hr>
         <div style='text-align: center; font-size: 0.9em; color: #777;'>
             <p>
-                <strong>{i18n('Desenvolvido por Rafael Godoy')}</strong>
+                <strong>{i18n('Desenvolvido por adewanggar')}</strong>
                 <br>
-                {i18n('Apoie o projeto, qualquer valor é bem-vindo:')} 
-                <a href='https://nubank.com.br/pagar/1ls6a4/0QpSSbWBSq' target='_blank'><strong>{i18n('Apoiar via PIX')}</strong></a>
+                <a href='https://www.instagram.com/alfansyahdr_' target='_blank' style='color: #E4405F; text-decoration: none;'><strong>📸 Instagram: @alfansyahdr_</strong></a>
                 <br>
                 {i18n('100% local • open source • no subscription required')} 
             </p>
