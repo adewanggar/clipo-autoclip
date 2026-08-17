@@ -34,14 +34,13 @@ def burn_video_file(video_path, subtitle_path, output_path):
         # print(f"Processado: {output_path}")
         return True, "NVENC Success"
     except subprocess.CalledProcessError as e:
-        print(f"Erro com NVENC ({str(e)}). Tentando CPU (libx264)...")
+        print(f"Gagal dengan NVENC ({str(e)}). Beralih ke CPU (libx264)...")
         try:
             # Fallback CPU
             run_ffmpeg("libx264", "ultrafast")
-            # print(f"Processado (CPU): {output_path}")
             return True, "CPU Success"
         except subprocess.CalledProcessError as e2:
-            err_msg = f"ERRO FATAL ao queimar legendas em {os.path.basename(video_path)}: {e2}"
+            err_msg = f"[ERROR] Gagal menerapkan subtitle pada {os.path.basename(video_path)}: {e2}"
             if e2.stderr:
                  err_msg += f" | FFmpeg Log: {e2.stderr.decode('utf-8')}"
             print(err_msg)
@@ -65,13 +64,13 @@ def burn(project_folder="tmp"):
     os.makedirs(output_folder, exist_ok=True)
     
     if not os.path.exists(videos_folder):
-        print(f"Pasta de vídeos finais não encontrada: {videos_folder}")
+        print(f"Folder video final tidak ditemukan: {videos_folder}")
         return
 
     # Itera sobre os arquivos de vídeo na pasta final
     files = os.listdir(videos_folder)
     if not files:
-        print("Nenhum arquivo encontrado em 'final' para queimar legendas.")
+        print("Tidak ada file video di folder 'final' untuk diberi subtitle.")
         return
 
     for video_file in files:
@@ -97,11 +96,11 @@ def burn(project_folder="tmp"):
                 # Define o caminho de saída para o vídeo com legendas
                 output_file = os.path.join(output_folder, f"{video_name}_subtitled.mp4")
 
-                print(f"Burning: {video_name}...")
+                print(f"Menerapkan subtitle pada: {video_name}...")
                 success, msg = burn_video_file(os.path.join(videos_folder, video_file), subtitle_file, output_file)
                 if success:
-                    print(f"Done: {output_file}")
+                    print(f"Selesai: {output_file}")
                 else:
-                    print(f"Fail: {msg}")
+                    print(f"Gagal: {msg}")
             else:
-                print(f"Legenda não encontrada para: {video_name} em {subtitle_file}")
+                print(f"Subtitle tidak ditemukan untuk: {video_name} di {subtitle_file}")

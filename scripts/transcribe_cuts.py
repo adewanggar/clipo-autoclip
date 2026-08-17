@@ -11,7 +11,7 @@ def transcribe(project_folder="tmp"):
 
         # Skip processing if the JSON file already exists
         if os.path.exists(json_file):
-            print(f"Arquivo já existe, pulando: {json_file}")
+            print(f"File sudah ada, dilewati: {json_file}")
             return
 
         command = [
@@ -30,16 +30,15 @@ def transcribe(project_folder="tmp"):
             "--output_format", "json",
         ]
 
-        print(f"Transcrevendo: {input_file}...")
+        print(f"Mentranskripsi: {input_file}...")
         result = subprocess.run(command, shell=True, text=True, capture_output=True)
-        print(f"Comando executado: {command}")
+        print(f"Perintah dieksekusi: {command}")
         
         if result.returncode != 0:
-            print("Erro durante a transcrição:")
+            print("Error saat transkripsi:")
             print(result.stderr)
         else:
-            print(f"Transcrição concluída. Arquivo salvo em: {output_file} e {json_file}")
-            # print(result.stdout) 
+            print(f"Transkripsi selesai. File disimpan di: {output_file} dan {json_file}")
 
     # Define o diretório de entrada e o diretório de saída
     input_folder = os.path.join(project_folder, 'final')
@@ -47,7 +46,7 @@ def transcribe(project_folder="tmp"):
     os.makedirs(output_folder, exist_ok=True)
 
     if not os.path.exists(input_folder):
-        print(f"Pasta de entrada não encontrada: {input_folder}")
+        print(f"Folder input tidak ditemukan: {input_folder}")
         return
 
     # Itera sobre todos os arquivos na pasta de entrada

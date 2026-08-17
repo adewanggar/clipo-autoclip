@@ -44,12 +44,12 @@ def init_insightface():
         try:
             import onnxruntime as ort
             available = ort.get_available_providers()
-            print(f"InsightFace: Available ONNX Providers: {available}")
+            print(f"InsightFace: Provider ONNX yang tersedia: {available}")
             if 'CUDAExecutionProvider' not in available:
-                print("WARNING: CUDAExecutionProvider not found. InsightFace will likely run on CPU.")
-                print("To fix, install onnxruntime-gpu: pip install onnxruntime-gpu")
+                print("Peringatan: CUDAExecutionProvider tidak ditemukan. InsightFace akan berjalan di CPU.")
+                print("Untuk akselerasi GPU, instal: pip install onnxruntime-gpu")
         except Exception as e:
-            print(f"InsightFace: Could not check available providers: {e}")
+            print(f"InsightFace: Tidak dapat memeriksa provider ONNX: {e}")
 
         with suppress_stdout_stderr():
             app = FaceAnalysis(name='buffalo_l', providers=providers)

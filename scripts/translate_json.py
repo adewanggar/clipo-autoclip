@@ -236,7 +236,7 @@ async def main():
                 output_file_path = os.path.join(folder_path, output_filename)
                 
                 if not os.path.exists(output_file_path):
-                    print(f'Traduzindo para {lang}: {filename}')
+                    print(f'Menerjemahkan ke {lang}: {filename}')
                     translated_data = await translate_json_file(Path(os.path.join(folder_path, filename)), Path(output_file_path), lang)
                     
                     if lang in substituicoes_por_idioma:
@@ -261,7 +261,7 @@ async def main():
             with open(original_file_path, 'w', encoding='utf-8') as file:
                 json.dump(original_data, file, ensure_ascii=False, indent=2)
 
-    print('Traduções e substituições concluídas.')
+    print('Penerjemahan dan penyesuaian teks selesai.')
 
 async def translate_project_subs(project_folder: str, target_lang: str):
     """
@@ -270,17 +270,17 @@ async def translate_project_subs(project_folder: str, target_lang: str):
     """
     subs_folder = Path(project_folder) / "subs"
     if not subs_folder.exists():
-        print(f"Subtitle folder not found: {subs_folder}")
+        print(f"Folder subtitle tidak ditemukan: {subs_folder}")
         return
 
     # Look for files ending in _processed.json
     json_files = list(subs_folder.glob("*_processed.json"))
     
     if not json_files:
-        print("No subtitle files found to translate.")
+        print("Tidak ada file subtitle untuk diterjemahkan.")
         return
 
-    print(f"Found {len(json_files)} subtitle files to translate to '{target_lang}'...")
+    print(f"Ditemukan {len(json_files)} file subtitle untuk diterjemahkan ke '{target_lang}'...")
 
     for json_file in json_files:
         # Backup logic
@@ -288,21 +288,20 @@ async def translate_project_subs(project_folder: str, target_lang: str):
         
         source_file = json_file
         if backup_file.exists():
-             print(f"Using existing backup for {json_file.name} as source.")
+             print(f"Menggunakan cadangan yang ada untuk {json_file.name} sebagai sumber.")
              source_file = backup_file
         else:
-             print(f"Backing up original to {backup_file.name}...")
+             print(f"Mencadangkan file asli ke {backup_file.name}...")
              try:
                 # Rename current to backup
                 json_file.rename(backup_file)
                 source_file = backup_file
              except Exception as e:
-                 print(f"Error creating backup for {json_file.name}: {e}")
+                 print(f"Error saat mencadangkan {json_file.name}: {e}")
                  continue
         
         # Translate source (backup) -> target (original filename)
-        # effectively replacing the file read by the next step
-        print(f"Translating {source_file.name} -> {json_file.name} ({target_lang})...")
+        print(f"Menerjemahkan {source_file.name} -> {json_file.name} ({target_lang})...")
         try:
             await translate_json_file(source_file, json_file, target_lang)
             
@@ -332,13 +331,12 @@ async def translate_project_subs(project_folder: str, target_lang: str):
                          json.dump(data, f, ensure_ascii=False, indent=2)
 
         except Exception as e:
-            print(f"Error translating {json_file.name}: {e}")
-            # If failed and output doesn't exist, try to restore backup?
+            print(f"Error saat menerjemahkan {json_file.name}: {e}")
             if not json_file.exists() and backup_file.exists():
-                print("Restoring backup due to failure...")
+                print("Memulihkan file cadangan karena terjadi kegagalan...")
                 backup_file.rename(json_file)
 
-    print("Translation batch finished.")
+    print("Proses penerjemahan batch selesai.")
 
 if __name__ == "__main__":
     asyncio.run(main())

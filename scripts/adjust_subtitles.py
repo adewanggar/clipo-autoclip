@@ -236,15 +236,14 @@ def adjust(base_color, base_size, highlight_size, highlight_color, words_per_blo
         try:
              with open(modes_file, "r") as f:
                  face_modes = json.load(f)
-             print("Loaded face modes for dynamic subtitle positioning.")
+             print("Memuat face modes untuk penyesuaian posisi subtitle dinamis.")
         except Exception as e:
-            print(f"Could not load face modes: {e}")
+            print(f"Tidak dapat memuat face modes: {e}")
 
     # Process all JSON files in input directory
-    # Process all JSON files in input directory
     if not os.path.exists(input_dir):
-        print(f"[ERROR] Subtitle folder missing: {input_dir}")
-        raise FileNotFoundError(f"Subtitle folder missing at {input_dir}. Ensure transcription completed successfully.")
+        print(f"[ERROR] Folder subtitle tidak ditemukan: {input_dir}")
+        raise FileNotFoundError(f"Folder subtitle tidak ditemukan di {input_dir}. Pastikan transkripsi berhasil.")
 
     for filename in os.listdir(input_dir):
         if filename.endswith(".json"):
@@ -259,6 +258,6 @@ def adjust(base_color, base_size, highlight_size, highlight_color, words_per_blo
                            strikeout, border_style, outline_thickness, shadow_size, uppercase,
                            face_modes, remove_punctuation)
 
-            print(f"Processed file: {filename} -> {output_filename}")
+            print(f"Memproses file subtitle: {filename} -> {output_filename}")
 
-    print("All JSON files processed and converted to ASS.")
+    print("Semua file JSON subtitle berhasil dikonversi ke format ASS.")

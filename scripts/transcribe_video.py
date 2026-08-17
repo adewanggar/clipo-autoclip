@@ -174,7 +174,7 @@ def parse_vtt(vtt_path):
     return segments
 
 def transcribe(input_file, model_name='large-v3', project_folder='tmp'):
-    print(i18n(f"Iniciando transcrição de {input_file}..."))
+    print(f"Memulai transkripsi video: {input_file}...")
     
     # Diagnóstico de Ambiente
     print(f"DEBUG: Python: {sys.executable}")
@@ -197,23 +197,22 @@ def transcribe(input_file, model_name='large-v3', project_folder='tmp'):
 
     # Verifica se os arquivos já existem
     if os.path.exists(srt_file) and os.path.exists(tsv_file) and os.path.exists(json_file):
-        print(f"Os arquivos SRT, TSV e JSON já existem. Pulando a transcrição.")
+        print(f"File SRT, TSV, dan JSON sudah ada. Melewati transkripsi.")
         return srt_file, tsv_file
 
     # Device Setup
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    print(f"DEBUG: Usando dispositivo: {device}")
+    print(f"Menggunakan perangkat komputasi: {device}")
     compute_type = "float16" if device == "cuda" else "float32"
 
     try:
         apply_safe_globals_hack()
         
         # 1. Carregar Áudio (sempre necessário)
-        print(f"Carregando áudio: {input_file}")
+        print(f"Memuat audio dari: {input_file}")
         audio = whisperx.load_audio(input_file)
         
         # 2. Verificar se existem legendas baixadas para Alignment Only
-        # Procurar por *.srt E *.vtt na pasta que comecem com input (ou o nome base)
         if os.path.exists(os.path.join(output_folder, "input.srt")):
             potential_subs = [os.path.join(output_folder, "input.srt")]
         elif os.path.exists(os.path.join(output_folder, "input.vtt")):
@@ -224,12 +223,11 @@ def transcribe(input_file, model_name='large-v3', project_folder='tmp'):
         start_segments = None
         alignment_only = False
         
-        # Default blind guess if we have no info
         detected_language = "en" 
 
         if potential_subs:
             sub_path = potential_subs[0]
-            print(f"Usando legenda fornecida: {sub_path}")
+            print(f"Menggunakan subtitle yang tersedia: {sub_path}")
             
             if sub_path.endswith('.srt'):
                 parsed = parse_srt(sub_path)
@@ -242,24 +240,20 @@ def transcribe(input_file, model_name='large-v3', project_folder='tmp'):
                 start_segments = parsed
                 alignment_only = True
                 
-                # Forçar EN conforme solicitado pelo usuário para alinhamento
                 detected_language = 'en'
-                print(f"Idioma forçado para alinhamento: {detected_language}")
+                print(f"Bahasa untuk sinkronisasi/aligment: {detected_language}")
                 
-                print("--- MODO ALINHAMENTO RÁPIDO ATIVADO ---")
+                print("--- MODE PENYELARASAN CEPAT AKTIF ---")
         
         result = None
         
         if alignment_only and start_segments:
-            # Pular Transcrição, ir direto para Alinhamento
-            print("--- MODO ALINHAMENTO RÁPIDO ATIVADO ---")
-            # Estrutura que o align espera: {'segments': [...], 'language': ...}
-            # Mas o align recebe segments como lista.
+            print("--- MODE PENYELARASAN CEPAT AKTIF ---")
             pass 
         else:
             # 3. Transcrever (Caminho Normal)
-            print("Nenhuma legenda válida encontrada. Realizando transcrição completa (WhisperX)...")
-            print(f"Carregando modelo {model_name}...")
+            print("Subtitle asli tidak ditemukan. Melakukan transkripsi lengkap (WhisperX)...")
+            print(f"Memuat model Whisper: {model_name}...")
             model = whisperx.load_model(
                 model_name, 
                 device, 
@@ -282,19 +276,14 @@ def transcribe(input_file, model_name='large-v3', project_folder='tmp'):
                 gc.collect()
                 torch.cuda.empty_cache()
 
-        # 4. Alinhar (Sempre executado, seja com subs parsed ou transcritos)
-        print(f"Alinhando transcrição (Idioma: {detected_language}) para obter timestamps precisos...")
-        # Usa o modelo específico solicitado pelo usuário: WAV2VEC2_ASR_LARGE_LV60K_960H
-        # Mas o whisperx.load_align_model escolhe automaticamente baseado na linguagem.
-        # Se for inglês, ele usa wav2vec2-large-960h-lv60-self geralmente.
-        # Não podemos forçar facilmente o modelo exato sem hackear o whisperx, mas o padrão é bom.
+        # 4. Alinhar
+        print(f"Menyelaraskan transkripsi (Bahasa: {detected_language}) untuk timestamp kata presisi...")
         
         try:
             model_a, metadata = whisperx.load_align_model(language_code=detected_language, device=device)
             
             aligned_result = whisperx.align(start_segments, model_a, metadata, audio, device, return_char_alignments=False)
             
-            # aligned_result agora contém "segments" com word timestamps
             result = aligned_result
             result["language"] = detected_language
             
@@ -303,17 +292,15 @@ def transcribe(input_file, model_name='large-v3', project_folder='tmp'):
                  torch.cuda.empty_cache()
                  
         except Exception as e:
-            print(f"Erro durante alinhamento: {e}. ")
+            print(f"Peringatan saat penyelarasan kata: {e}. ")
             if alignment_only:
-                 print("Falha crítica no alinhamento de legendas externas. Abortando usage de legendas externas.")
-                 # Opcional: Fallback para transcrição normal se falhar? Seria complexo aqui pois já limpamos memória.
-                 # Vamos apenas salvar o que temos (timestamps da legenda original podem não bater com áudio perfeitamente se não alinhar)
+                 print("Gagal menyelaraskan subtitle eksternal.")
                  result = {"segments": start_segments, "language": detected_language}
             else:
-                 print("Continuando com transcrição bruta.")
+                 print("Melanjutkan dengan transkripsi dasar.")
 
         # 5. Salvar Resultados
-        print("Salvando resultados...")
+        print("Menyimpan hasil transkripsi (SRT, TSV, JSON)...")
         from whisperx.utils import get_writer
         
         save_options = {
@@ -321,11 +308,6 @@ def transcribe(input_file, model_name='large-v3', project_folder='tmp'):
             "max_line_count": None,
             "max_line_width": None
         }
-        
-        # Se veio do alignment_only, result é {'segments': [...], ...}
-        # Se o alinhamento falhou, result tem segments originais.
-        
-        # WhisperX writers esperam um dicionário result com chaves 'segments', 'language'.
         
         writer_srt = get_writer("srt", output_folder)
         writer_srt(result, input_file, save_options)
@@ -338,15 +320,15 @@ def transcribe(input_file, model_name='large-v3', project_folder='tmp'):
         
         end_time = time.time()
         elapsed = end_time - start_time
-        print(f"Processamento concluído em {int(elapsed//60)}m {int(elapsed%60)}s.")
+        print(f"Transkripsi audio selesai dalam {int(elapsed//60)}m {int(elapsed%60)}d.")
 
     except Exception as e:
-        print(f"ERRO CRÍTICO na transcrição: {e}")
+        print(f"ERROR KRITIS pada transkripsi: {e}")
         import traceback
         traceback.print_exc()
         raise
 
     if not os.path.exists(srt_file):
-        print(f"AVISO: Arquivo SRT {srt_file} não encontrado após execução.")
+        print(f"Peringatan: File SRT {srt_file} tidak ditemukan.")
     
     return srt_file, tsv_file

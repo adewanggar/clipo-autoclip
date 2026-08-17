@@ -379,7 +379,7 @@ def call_gemini(prompt, api_key, model_name='gemini-2.5-flash-lite-preview-09-20
 
 def call_kieai(prompt, api_key, model_name='gpt-5-6-luna', reasoning_effort='medium'):
     if not api_key:
-        print("[ERRO] API Key do Kie.ai não foi fornecida.")
+        print("[ERROR] API Key Kie.ai belum dimasukkan.")
         return "{}"
     
     url = "https://api.kie.ai/codex/v1/responses"
@@ -439,16 +439,16 @@ def call_kieai(prompt, api_key, model_name='gpt-5-6-luna', reasoning_effort='med
                 return "{}"
             elif response.status_code in [408, 409, 429, 500, 502, 503, 504]:
                 wait_time = base_wait * (2 ** attempt)
-                print(f"[WARN] Kie.ai retornou status {response.status_code}. Tentando novamente em {wait_time}s... (Tentativa {attempt+1}/{max_retries})")
+                print(f"[WARN] Kie.ai mengembalikan status {response.status_code}. Mencoba kembali dalam {wait_time}s... (Percobaan {attempt+1}/{max_retries})")
                 time.sleep(wait_time)
             else:
-                print(f"Erro na API do Kie.ai ({response.status_code}): {response.text}")
+                print(f"Error pada API Kie.ai ({response.status_code}): {response.text}")
                 return "{}"
         except Exception as e:
-            print(f"[WARN] Erro de conexão com Kie.ai (Tentativa {attempt+1}/{max_retries}): {e}")
+            print(f"[WARN] Gagal terhubung ke Kie.ai (Percobaan {attempt+1}/{max_retries}): {e}")
             if attempt < max_retries - 1:
                 time.sleep(base_wait * (2 ** attempt))
-    print(f"Falha crítica após {max_retries} tentativas no Kie.ai.")
+    print(f"[ERROR] Gagal setelah {max_retries} percobaan ke Kie.ai.")
     return "{}"
 
 def call_g4f(prompt, model_name="gpt-4o-mini"):
@@ -921,12 +921,12 @@ OUTPUT JSON ONLY:
 
     all_raw_segments = []
 
-    print(f"Processando {len(output_texts)} chunks usando modo: {ai_mode.upper()}")
+    print(f"Memproses {len(output_texts)} bagian teks menggunakan AI: {ai_mode.upper()}")
 
     local_llm_instance = None
     if ai_mode == "local":
         if not HAS_LLAMA_CPP:
-            print("Error: llama-cpp-python not installed. Please install it to use Local mode.")
+            print("Error: llama-cpp-python belum terinstal. Silakan instal untuk mode Local.")
             return {"segments": []}
             
         models_dir = os.path.join(base_dir, 'models')
@@ -935,10 +935,10 @@ OUTPUT JSON ONLY:
              if os.path.exists(model_name):
                  model_path = model_name
              else:
-                 print(f"Error: Model not found at {model_path}")
+                 print(f"Error: Model tidak ditemukan di {model_path}")
                  return {"segments": []}
         
-        print(f"[INFO] Loading Local Model: {os.path.basename(model_path)} (This may take a while)...")
+        print(f"[INFO] Memuat Model Lokal: {os.path.basename(model_path)} (Mungkin memakan waktu)...")
         try:
             local_llm_instance = Llama(
                 model_path=model_path,
@@ -947,7 +947,7 @@ OUTPUT JSON ONLY:
                 verbose=False
             )
         except Exception as e:
-            print(f"Failed to load model: {e}")
+            print(f"Gagal memuat model: {e}")
             return {"segments": []}
 
     for i, prompt in enumerate(output_texts):
@@ -957,23 +957,21 @@ OUTPUT JSON ONLY:
             with open(manual_prompt_path, "w", encoding="utf-8") as f:
                 f.write(prompt)
         except Exception as e:
-            print(f"[ERRO] Falha ao salvar prompt.txt: {e}")
+            print(f"[ERROR] Gagal menyimpan prompt.txt: {e}")
         
         if ai_mode == "manual":
-            print(f"\n[INFO] O prompt foi salvo em: {manual_prompt_path}")
+            print(f"\n[INFO] Prompt disimpan di: {manual_prompt_path}")
             print("\n" + "="*60)
-            print(f"CHUNK {i+1}/{len(output_texts)}")
+            print(f"BAGIAN (CHUNK) {i+1}/{len(output_texts)}")
             print("="*60)
-            print("COPIE O PROMPT ABAIXO (OU DO ARQUIVO GERADO) E COLE NA SUA IA PREFERIDA:")
+            print("SALIN PROMPT DI BAWAH INI DAN TEMPELKAN KE AI PILIHAN ANDA:")
             print("-" * 20)
             print(prompt)
             print("-" * 20)
             print("="*60)
-            print("Cole o JSON de resposta abaixo e pressione ENTER.")
-            print("Dica: Se o JSON tiver múltiplas linhas, tente colar tudo de uma vez ou minificado.")
-            print("Se preferir, digite 'file' para ler de um arquivo 'tmp/response.json'.")
+            print("Tempelkan respons JSON di bawah ini lalu tekan ENTER.")
             
-            user_input = input("JSON ou 'file': ")
+            user_input = input("JSON atau 'file': ")
             
             if user_input.lower() == 'file':
                 try:
@@ -981,11 +979,11 @@ OUTPUT JSON ONLY:
                     with open(response_json_path, 'r', encoding='utf-8') as rf:
                         response_text = rf.read()
                 except FileNotFoundError:
-                    print(f"Arquivo {response_json_path} não encontrado.")
+                    print(f"File {response_json_path} tidak ditemukan.")
             else:
                 response_text = user_input
                 if response_text.strip().startswith("{") and not response_text.strip().endswith("}"):
-                    print("Parece incompleto. Cole o resto e dê Enter (ou Ctrl+C para cancelar):")
+                    print("Format belum lengkap. Tempelkan sisanya lalu tekan Enter:")
                     try:
                         rest = sys.stdin.read() 
                         response_text += rest
@@ -993,16 +991,16 @@ OUTPUT JSON ONLY:
                         pass
 
         elif ai_mode == "kieai":
-            print(f"Enviando chunk {i+1} para Kie.ai GPT Luna (Model: {model_name})...")
+            print(f"Mengirim bagian {i+1}/{len(output_texts)} ke Kie.ai GPT Luna (Model: {model_name})...")
             response_text = call_kieai(prompt, api_key, model_name=model_name, reasoning_effort=reasoning_effort)
         elif ai_mode == "gemini":
-            print(f"Enviando chunk {i+1} para o Gemini (Model: {model_name})...")
+            print(f"Mengirim bagian {i+1}/{len(output_texts)} ke Google Gemini (Model: {model_name})...")
             response_text = call_gemini(prompt, api_key, model_name=model_name)
         elif ai_mode == "g4f":
-            print(f"Enviando chunk {i+1} para o G4F (Model: {model_name})...")
+            print(f"Mengirim bagian {i+1}/{len(output_texts)} ke G4F (Model: {model_name})...")
             response_text = call_g4f(prompt, model_name=model_name)
         elif ai_mode == "local" and local_llm_instance:
-            print(f"Processing chunk {i+1} with Local LLM...")
+            print(f"Memproses bagian {i+1}/{len(output_texts)} dengan Model Lokal...")
             try:
                 output = local_llm_instance.create_chat_completion(
                     messages=[
@@ -1014,7 +1012,7 @@ OUTPUT JSON ONLY:
                 )
                 response_text = output['choices'][0]['message']['content']
             except Exception as e:
-                print(f"Error evaluating local model: {e}")
+                print(f"Gagal memproses model lokal: {e}")
                 response_text = "{}"
 
         # --- Save RAW Response for Debugging ---
@@ -1022,20 +1020,20 @@ OUTPUT JSON ONLY:
             raw_response_path = os.path.join(project_folder, f"response_raw_part_{i+1}.txt")
             with open(raw_response_path, "w", encoding="utf-8") as f:
                 f.write(response_text)
-            print(f"[DEBUG] Raw response saved to: {raw_response_path}")
+            print(f"[DEBUG] Respons mentah disimpan di: {raw_response_path}")
         except Exception as e:
-            print(f"[WARN] Failed to save raw response: {e}")
+            print(f"[WARN] Gagal menyimpan raw response: {e}")
 
         # Processar resposta
         try:
             data = clean_json_response(response_text)
             chunk_segments = data.get("segments", [])
-            print(f"Encontrados {len(chunk_segments)} segmentos neste chunk.")
+            print(f"Ditemukan {len(chunk_segments)} segmen potensial pada bagian ini.")
             all_raw_segments.extend(chunk_segments)
         except json.JSONDecodeError:
-            print(f"Erro: Resposta inválida.")
+            print(f"Error: Format JSON respons dari AI tidak valid.")
         except Exception as e:
-            print(f"Erro desconhecido ao processar chunk: {e}")
+            print(f"Error saat memproses bagian respons: {e}")
 
     # Call the alignment / processing logic
     return process_segments(

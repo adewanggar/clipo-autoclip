@@ -100,9 +100,8 @@ def cut(segments, project_folder="tmp", skip_video=False):
             output_filename = f"{base_name}_original_scale.mp4"
             output_path = os.path.join(cuts_folder, output_filename)
 
-            print(f"Processing segment {i+1}/{len(segments)}")
-            print(f"Start time: {start_time}, Duration: {duration}")
-            # print(f"Executing command: {' '.join(command)}")
+            print(f"Memotong segmen {i+1}/{len(segments)}...")
+            print(f"Waktu mulai: {start_time}, Durasi: {duration}")
 
             # VIDEO GENERATION
             if not skip_video:
@@ -138,11 +137,11 @@ def cut(segments, project_folder="tmp", skip_video=False):
                     subprocess.run(command, check=True, capture_output=True, text=True)
                     if os.path.exists(output_path):
                         file_size = os.path.getsize(output_path)
-                        print(f"Generated segment: {output_filename}, Size: {file_size} bytes")
+                        print(f"Berhasil membuat segmen: {output_filename} ({file_size} bytes)")
                 except subprocess.CalledProcessError as e:
-                    print(f"Error executing ffmpeg: {e}")
+                    print(f"Error saat mengeksekusi ffmpeg: {e}")
             else:
-                print(f"Skipping video generation for {output_filename} (using existing). check json...")
+                print(f"Melewati pembuatan video untuk {output_filename} (menggunakan file yang ada)...")
             
             # --- JSON CUTTING (ALWAYS RUN) ---
             end_time_seconds = start_time_seconds + float(duration_seconds)

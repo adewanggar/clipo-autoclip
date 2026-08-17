@@ -27,30 +27,30 @@ def get_best_encoder():
         
         # Priority: NVENC (NVIDIA) > AMF (AMD) > QSV (Intel) > CPU
         if "h264_nvenc" in output:
-            print("Encoder Detected: NVIDIA (h264_nvenc)")
+            print("Encoder Terdeteksi: NVIDIA (h264_nvenc)")
             CACHED_ENCODER = ("h264_nvenc", "fast") # p1-p7 presets could be used but 'fast' maps well
             return CACHED_ENCODER
         
         if "h264_amf" in output:
-            print("Encoder Detected: AMD (h264_amf)")
+            print("Encoder Terdeteksi: AMD (h264_amf)")
             CACHED_ENCODER = ("h264_amf", "speed") # quality, speed, balanced
             return CACHED_ENCODER
             
         if "h264_qsv" in output:
-             print("Encoder Detected: Intel QSV (h264_qsv)")
+             print("Encoder Terdeteksi: Intel QSV (h264_qsv)")
              CACHED_ENCODER = ("h264_qsv", "veryfast")
              return CACHED_ENCODER
              
         # Mac OS (VideoToolbox)
         if "h264_videotoolbox" in output:
-             print("Encoder Detected: MacOS (h264_videotoolbox)")
+             print("Encoder Terdeteksi: MacOS (h264_videotoolbox)")
              CACHED_ENCODER = ("h264_videotoolbox", "default")
              return CACHED_ENCODER
 
     except Exception as e:
-        print(f"Error checking encoders: {e}")
+        print(f"Error saat memeriksa encoder: {e}")
 
-    print("Encoder Detected: CPU (libx264)")
+    print("Encoder Terdeteksi: CPU (libx264)")
     CACHED_ENCODER = ("libx264", "ultrafast")
     return CACHED_ENCODER
 
@@ -1104,12 +1104,12 @@ def edit(project_folder="tmp", face_model="insightface", face_mode="auto", detec
     # Only init InsightFace if selected or default
     if INSIGHTFACE_AVAILABLE and (face_model == "insightface"):
         try:
-            print("Initializing InsightFace...")
+            print("Memulai inisialisasi InsightFace...")
             init_insightface()
             insightface_working = True
-            print("InsightFace Initialized Successfully.")
+            print("InsightFace berhasil diinisialisasi.")
         except Exception as e:
-            print(f"WARNING: InsightFace Initialization Failed ({e}). Will try MediaPipe.")
+            print(f"Peringatan: Gagal memuat InsightFace ({e}). Beralih ke MediaPipe.")
             insightface_working = False
 
     mediapipe_working = False
@@ -1132,21 +1132,17 @@ def edit(project_folder="tmp", face_model="insightface", face_mode="auto", detec
             with mp_face_detection.FaceDetection(model_selection=0, min_detection_confidence=0.5) as fd:
                 pass
             mediapipe_working = True
-            print("MediaPipe Initialized Successfully.")
+            print("MediaPipe berhasil diinisialisasi.")
         except Exception as e:
-            print(f"WARNING: MediaPipe Initialization Failed ({e}). Switching to OpenCV Haar Cascade.")
+            print(f"Peringatan: Gagal memuat MediaPipe ({e}). Beralih ke Haar Cascade.")
             mediapipe_working = False
             use_haar = True
     
-    # Logic for MediaPipe replaced by dynamic pass
-    # mp_num_faces = 2 if face_mode == "2" else 1  
-
     import glob
     found_files = sorted(glob.glob(os.path.join(cuts_folder, "*_original_scale.mp4")))
 
     if not found_files:
-        print(f"No files found in {cuts_folder}.")
-        # Try finding lookahead in case listdir failed? No, glob is fine.
+        print(f"Tidak ada file ditemukan di {cuts_folder}.")
         return
 
     for input_file in found_files:
@@ -1192,8 +1188,8 @@ def edit(project_folder="tmp", face_model="insightface", face_mode="auto", detec
                 except Exception as e:
                     import traceback
                     traceback.print_exc()
-                    print(f"InsightFace processing failed for {input_filename}: {e}")
-                    print("Falling back to MediaPipe/Haar...")
+                    print(f"Gagal memproses InsightFace untuk {input_filename}: {e}")
+                    print("Beralih ke MediaPipe/Haar...")
             
             # 2. Try MediaPipe if InsightFace failed or not available
             if not success and mediapipe_working:
@@ -1203,24 +1199,21 @@ def edit(project_folder="tmp", face_model="insightface", face_mode="auto", detec
                          mp_pose.Pose(static_image_mode=False, min_detection_confidence=0.5, min_tracking_confidence=0.5) as pose:
                         
                         generate_short_mediapipe(input_file, output_file, index, face_mode, project_folder, final_folder, face_detection, face_mesh, pose, detection_period=detection_period, no_face_mode=no_face_mode)
-                        # We don't easily know detected mode here without return, assuming '1' or '2' based on last frame? 
-                        # Ideally function should return as well.
-                        detected_mode = "1" # Placeholder, user didn't complain about stats.
-                        # detected_mode = str(mp_num_faces) # Error fix: mp_num_faces not defined
+                        detected_mode = "1"
                         if face_mode == "2":
                             detected_mode = "2"
                     success = True
                 except Exception as e:
-                     print(f"MediaPipe processing failed (fallback): {e}")
+                     print(f"Gagal memproses MediaPipe (fallback): {e}")
             
             # 3. Try Haar if others failed
             if not success and (use_haar or (not mediapipe_working and not insightface_working)):
                  try:
-                    print("Attempts with Haar Cascade...")
+                    print("Mencoba dengan Haar Cascade...")
                     generate_short_haar(input_file, output_file, index, project_folder, final_folder, detection_period=detection_period, no_face_mode=no_face_mode)
                     success = True
                  except Exception as e2:
-                    print(f"Haar fallback also failed: {e2}")
+                    print(f"Haar fallback juga gagal: {e2}")
 
             # 4. Last Resort: Center Crop
             if not success:
@@ -1245,7 +1238,7 @@ def edit(project_folder="tmp", face_model="insightface", face_mode="auto", detec
                  if os.path.exists(generated_mp4_path):
                      if os.path.exists(new_mp4_path): os.remove(new_mp4_path)
                      os.rename(generated_mp4_path, new_mp4_path)
-                     print(f"Renamed Output to Title: {new_mp4_name}")
+                     print(f"Nama file video diubah sesuai judul: {new_mp4_name}")
                      
                      # 2. Rename JSON Subtitle (if exists and hasn't been renamed by cut_segments)
                      subs_folder = os.path.join(project_folder, "subs")
