@@ -318,5 +318,9 @@
     "Error loading custom JSON: {}": "Gagal memuat custom JSON: {}",
     "Organizing output files...": "Merapikan file hasil output...",
     "Metadata file not found: ": "File metadata tidak ditemukan: ",
-    "Error reading metadata: ": "Gagal membaca metadata: "
+    "Error reading metadata: ": "Gagal membaca metadata: ",
+    "\nWarning: YouTube 403 Forbidden encountered. Retrying with fallback player client (iOS/Android)...": "\nPeringatan: Terkena batasan YouTube HTTP 403 Forbidden. Mencoba kembali dengan client alternatif (iOS/Android)...",
+    "Fallback attempt failed: {}": "Percobaan alternatif gagal: {}",
+    "Fatal error on second attempt: {}": "Gagal pada percobaan kedua: {}",
+    "Fatal error on fallback: {}": "Gagal total pada percobaan alternatif: {}"
 }

@@ -133,17 +133,19 @@ def download(url, base_root="VIRALS", download_subs=True, quality="best"):
         # Opções de Legenda
         'writesubtitles': download_subs,
         'writeautomaticsub': download_subs,
-        'subtitleslangs': ['pt.*', 'en.*', 'sp.*'], # Prioritize generic PT, EN, SP
-        'http_headers': {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        },
+        'subtitleslangs': ['id.*', 'en.*', 'pt.*', 'sp.*'], # Prioritize ID, EN, PT, SP
         'skip_download': False,
         'quiet': False,
         'no_warnings': False,
         'force_ipv4': True,
+        'geo_bypass': True,
+        'nocheckcertificate': True,
+        'extractor_args': {
+            'youtube': {
+                'player_client': ['android', 'ios', 'web']
+            }
+        }
     }
-    
-
     
     if download_subs:
         ydl_opts['postprocessors'] = [{
@@ -168,6 +170,34 @@ def download(url, base_root="VIRALS", download_subs=True, quality="best"):
             print(i18n("Details: {}").format(e))
             sys.exit(1)
         
+        elif "403" in error_str or "Forbidden" in error_str or "unable to download video data" in error_str:
+            print(i18n("\nWarning: YouTube 403 Forbidden encountered. Retrying with fallback player client (iOS/Android)..."))
+            fallback_opts = dict(ydl_opts)
+            fallback_opts['extractor_args'] = {
+                'youtube': {
+                    'player_client': ['ios', 'android', 'mweb']
+                }
+            }
+            fallback_opts['format'] = 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best'
+            try:
+                with yt_dlp.YoutubeDL(fallback_opts) as ydl:
+                    ydl.download([url])
+            except Exception as fallback_err:
+                print(i18n("Fallback attempt failed: {}").format(fallback_err))
+                if download_subs:
+                    print(i18n("Retrying ONLY the video (without subtitles)..."))
+                    fallback_opts['writesubtitles'] = False
+                    fallback_opts['writeautomaticsub'] = False
+                    fallback_opts['postprocessors'] = [p for p in fallback_opts.get('postprocessors', []) if 'Subtitle' not in p.get('key', '')]
+                    try:
+                        with yt_dlp.YoutubeDL(fallback_opts) as ydl:
+                            ydl.download([url])
+                    except Exception as e3:
+                        print(i18n("Fatal error on second attempt: {}").format(e3))
+                        raise
+                else:
+                    raise
+
         elif download_subs and ("Unable to download video subtitles" in error_str or "429" in error_str):
             print(i18n("\nWarning: Error downloading subtitles ({}).").format(e))
             print(i18n("Retrying ONLY the video (without subtitles)..."))
